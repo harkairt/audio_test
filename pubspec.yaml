@@ -26,8 +26,11 @@ dependencies:
   audio_service: ^0.16.1
   cupertino_icons: ^1.0.0
   flutter_cache_manager: ^2.1.1
+  flutter_downloader: ^1.5.2
   flutter_tts: ^2.1.0
   just_audio: ^0.6.8
+  path_provider: ^1.6.27
+  permission_handler: ^5.0.1+1
 
 dev_dependencies:
   flutter_test:

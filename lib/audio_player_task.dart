@@ -12,21 +12,24 @@ import 'package:just_audio/just_audio.dart';
 import 'package:rxdart/rxdart.dart';
 
 // NOTE: Your entrypoint MUST be a top-level function.
-void audioPlayerTaskEntrypoint() async {
-  var file = await DefaultCacheManager().getSingleFile(
-      'https://file167.iijj.nl/?file=M3R4SUNiN3JsOHJ6WWQ2a3NQS1Y5ZGlxVlZIOCtyZ1d1ZndBNWxzQktKRnQ3Y1lZOXRlVEZ2a0VaWVpFN3FXT1B1eG52ZzN3WHVmRlBSL2E4SjR2VG5hKzU5Y3BzV0tLb2FnNVZ0eGxReFQ5M3JTRm15RWx6RlhUTEoyZk02RUVZSFp2cGc1ZzNDdllnYnJHdUJ6aXNrS3ZybGVDVXpNTG9TZ2VMY3JSenB4SDJXYlpmTWozMjU4U2tpZU91N2hkOTZLOGkxSERqYjh1NjVweVcwc3BXNlViM0lMbDF1TEpzVTRVaGNSTmpCejErckgzVnM5aFdyYVhZekl0YlhSZXZMbTZEMTBOMlhnTjdqM3Y%3D');
+Future audioPlayerTaskEntrypoint() async {
+  // var file = await DefaultCacheManager().getSingleFile(
+  //     'https://file167.iijj.nl/?file=M3R4SUNiN3JsOHJ6WWQ2a3NQS1Y5ZGlxVlZIOCtyZ1d1ZndBNWxzQktKRnQ3Y1lZOXRlVEZ2a0VaWVpFN3FXT1B1eG52ZzN3WHVmRlBSL2E4SjR2VG5hKzU5Y3BzV0tLb2FnNVZ0eGxReFQ5M3JTRm15RWx6RlhUTEoyZk02RUVZSFp2cGc1ZzNDdllnYnJHdUJ6aXNrS3ZybGVDVXpNTG9TZ2VMY3JSenB4SDJXYlpmTWozMjU4U2tpZU91N2hkOTZLOGkxSERqYjh1NjVweVcwc3BXNlViM0lMbDF1TEpzVTRVaGNSTmpCejErckgzVnM5aFdyYVhZekl0YlhSZXZMbTZEMTBOMlhnTjdqM3Y%3D');
 
-  debugPrint(file.path);
-  debugPrint(file.basename);
-  debugPrint(file.uri.toString());
-  AudioServiceBackground.run(() => AudioPlayerTask(file.uri.toString()));
+  // debugPrint(file.path);
+  // debugPrint(file.basename);
+  // debugPrint(file.uri.toString());
+  final filePath = File(
+      "/Users/thark/Library/Developer/CoreSimulator/Devices/2833D949-3B27-47CB-9377-AAF6EC9E5F26/data/Containers/Data/Application/716965B2-D072-40BB-8EA0-32F6EA1C97BB/Documents/DL/SoundHelix-Song-7.mp3");
+  debugPrint(filePath.uri.toFilePath());
+  AudioServiceBackground.run(() => AudioPlayerTask(filePath.uri.toString()));
 }
 
 /// Provides access to a library of media items. In your app, this could come
 /// from a database or web service.
 ///
 class MediaLibrary {
-  MediaLibrary(this.fileUriToString) {
+  MediaLibrary(this.filePath) {
     _items.addAll([
       MediaItem(
         id: "https://s3.amazonaws.com/scifri-episodes/scifri20181123-episode.mp3",
@@ -53,17 +56,17 @@ class MediaLibrary {
         // artUri: "https://media.wnyc.org/i/1400/1400/l/80/1/ScienceFriday_WNYCStudios_1400.jpg",
       ),
       MediaItem(
-        id: fileUriToString,
-        album: "music",
-        title: "title",
-        artist: "aqrtisto",
+        id: filePath,
+        album: "music2",
+        title: "title2",
+        artist: "aqrtisto2",
         // duration: Duration(milliseconds: 2856950),
         // artUri: "https://media.wnyc.org/i/1400/1400/l/80/1/ScienceFriday_WNYCStudios_1400.jpg",
       ),
     ]);
   }
 
-  final String fileUriToString;
+  final String filePath;
   final _items = <MediaItem>[];
 
   List<MediaItem> get items => _items;
@@ -71,8 +74,9 @@ class MediaLibrary {
 
 /// This task defines logic for playing a list of podcast episodes.
 class AudioPlayerTask extends BackgroundAudioTask {
-  AudioPlayerTask(String fileUriToString) {
-    _mediaLibrary = MediaLibrary(fileUriToString);
+  AudioPlayerTask(String filePath) {
+    debugPrint(filePath);
+    _mediaLibrary = MediaLibrary(filePath);
   }
 
   MediaLibrary _mediaLibrary;

@@ -1,19 +1,24 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
-
+import 'dart:isolate';
+import 'dart:ui';
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_service_test/audio_player_task.dart';
+import 'package:audio_service_test/downloader_main.dart';
 import 'package:audio_service_test/seeker.dart';
 import 'package:audio_service_test/text_to_speeck_task.dart';
-import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:path_provider/path_provider.dart';
 
-void main() => runApp(new MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await FlutterDownloader.initialize(debug: debug);
+
+  runApp(new MyApp());
+}
 
 class MyApp extends StatelessWidget {
   @override
@@ -51,6 +56,7 @@ class MainScreen extends StatelessWidget {
                   // UI to show when we're not running, i.e. a menu.
                   audioPlayerButton(),
                   if (kIsWeb || !Platform.isMacOS) textToSpeechButton(),
+                  downloadFileButton(),
                 ] else ...[
                   // UI to show when we're running, i.e. player state/controls.
 
@@ -191,6 +197,54 @@ class MainScreen extends StatelessWidget {
             androidNotificationChannelName: 'Audio Service Demo',
             androidNotificationColor: 0xFF2196f3,
             androidNotificationIcon: 'mipmap/ic_launcher',
+          );
+        },
+      );
+
+  RaisedButton downloadFileButton() => RaisedButton(
+        child: Text('Downloadz'),
+        onPressed: () async {
+          WidgetsFlutterBinding.ensureInitialized();
+          Directory documents = await getApplicationDocumentsDirectory();
+
+          debugPrint('documents.path ${documents.path}');
+          final saveDirPath = Directory(documents.path + Platform.pathSeparator + 'DL');
+          bool hasExisted = await saveDirPath.exists();
+          if (!hasExisted) {
+            await saveDirPath.create();
+          }
+
+          final taskId = await FlutterDownloader.enqueue(
+            url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
+            savedDir: saveDirPath.path,
+            showNotification: false, // show download progress in status bar (for Android)
+            openFileFromNotification: false, // click on notification to open downloaded file (for Android)
+          );
+
+          debugPrint(taskId);
+
+          await Future<void>.delayed(Duration(milliseconds: 5000));
+
+          final tasks = await FlutterDownloader.loadTasksWithRawQuery(query: 'SELECT * FROM task');
+          // debugPrint('${tasks.last.toString()}');
+          final lastTask = tasks.last;
+          final filePath = '${lastTask.savedDir}${Platform.pathSeparator}${lastTask.filename}';
+          debugPrint(filePath);
+          // debugPrint('${tasks[0].savedDir}  -  ${tasks[0].filename}');
+          // FlutterDownloader.open(taskId: taskId);
+
+          // FlutterDownloader.registerCallback((String id, DownloadTaskStatus status, int progress) {
+          //   final SendPort send = IsolateNameServer.lookupPortByName('downloader_send_port');
+          //   send.send([id, status, progress]);
+          // });
+          AudioService.start(
+            backgroundTaskEntrypoint: audioPlayerTaskEntrypoint,
+            androidNotificationChannelName: 'Audio Service Demo',
+            // Enable this if you want the Android service to exit the foreground state on pause.
+            //androidStopForegroundOnPause: true,
+            androidNotificationColor: 0xFF2196f3,
+            androidNotificationIcon: 'mipmap/ic_launcher',
+            androidEnableQueue: true,
           );
         },
       );
