@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:ui';
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_service_test/audio_player_task.dart';
 import 'package:audio_service_test/downloader_main.dart';
+import 'package:audio_service_test/player_service.dart';
 import 'package:audio_service_test/seeker.dart';
 import 'package:audio_service_test/text_to_speeck_task.dart';
 import 'package:flutter/foundation.dart';
@@ -32,6 +32,8 @@ class MyApp extends StatelessWidget {
 }
 
 class MainScreen extends StatelessWidget {
+  final playerService = PlayerService();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -40,7 +42,7 @@ class MainScreen extends StatelessWidget {
       ),
       body: Center(
         child: StreamBuilder<bool>(
-          stream: AudioService.runningStream,
+          stream: playerService.isServiceRunningStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.active) {
               // Don't show anything until we've ascertained whether or not the
@@ -61,12 +63,13 @@ class MainScreen extends StatelessWidget {
                   // UI to show when we're running, i.e. player state/controls.
 
                   // Queue display/controls.
-                  StreamBuilder<QueueState>(
+                  StreamBuilder<PlayerQueueState>(
                     stream: _queueStateStream,
                     builder: (context, snapshot) {
+                      debugPrint('_queueStateStream builder');
                       final queueState = snapshot.data;
                       final queue = queueState?.queue ?? [];
-                      final mediaItem = queueState?.mediaItem;
+                      final currentlyPlayingItem = queueState?.currentlyPlayingItem;
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -77,23 +80,26 @@ class MainScreen extends StatelessWidget {
                                 IconButton(
                                   icon: Icon(Icons.skip_previous),
                                   iconSize: 64.0,
-                                  onPressed: mediaItem == queue.first ? null : AudioService.skipToPrevious,
+                                  onPressed: currentlyPlayingItem == queue.first ? null : playerService.skipToPrevious,
                                 ),
                                 IconButton(
                                   icon: Icon(Icons.skip_next),
                                   iconSize: 64.0,
-                                  onPressed: mediaItem == queue.last ? null : AudioService.skipToNext,
+                                  onPressed: currentlyPlayingItem == queue.last ? null : playerService.skipToNext,
                                 ),
                               ],
                             ),
-                          if (mediaItem?.title != null) Text(mediaItem.title),
+                          if (currentlyPlayingItem?.title != null) Text(currentlyPlayingItem.title),
                         ],
                       );
                     },
                   ),
                   // Play/pause/stop buttons.
                   StreamBuilder<bool>(
-                    stream: AudioService.playbackStateStream.map((state) => state.playing).distinct(),
+                    stream: playerService.playerPlaybackStateStream.map((state) {
+                      debugPrint(state.toString());
+                      return state.playing;
+                    }).distinct(),
                     builder: (context, snapshot) {
                       final playing = snapshot.data ?? false;
                       return Row(
@@ -106,7 +112,7 @@ class MainScreen extends StatelessWidget {
                             iconSize: 64.0,
                             onPressed: () async {
                               debugPrint('onPressed setSpeed to 2.5');
-                              AudioService.setSpeed(2.5);
+                              playerService.setSpeed(2.5);
                             },
                           )
                         ],
@@ -122,29 +128,13 @@ class MainScreen extends StatelessWidget {
                         duration: mediaState?.mediaItem?.duration ?? Duration.zero,
                         position: mediaState?.position ?? Duration.zero,
                         onChangeEnd: (newPosition) {
-                          AudioService.seekTo(newPosition);
+                          playerService.seekTo(newPosition);
                         },
                       );
                     },
                   ),
-                  // Display the processing state.
-                  StreamBuilder<AudioProcessingState>(
-                    stream: AudioService.playbackStateStream.map((state) => state.processingState).distinct(),
-                    builder: (context, snapshot) {
-                      final processingState = snapshot.data ?? AudioProcessingState.none;
-                      return Text("Processing state: ${describeEnum(processingState)}");
-                    },
-                  ),
-                  // Display the latest custom event.
-                  StreamBuilder(
-                    stream: AudioService.customEventStream,
-                    builder: (context, snapshot) {
-                      return Text("custom event: ${snapshot.data}");
-                    },
-                  ),
-                  // Display the notification click status.
                   StreamBuilder<bool>(
-                    stream: AudioService.notificationClickEventStream,
+                    stream: playerService.notificationClickEventStream,
                     builder: (context, snapshot) {
                       return Text(
                         'Notification Click Status: ${snapshot.data}',
@@ -160,44 +150,30 @@ class MainScreen extends StatelessWidget {
     );
   }
 
-  /// A stream reporting the combined state of the current media item and its
-  /// current position.
-  Stream<MediaState> get _mediaStateStream => Rx.combineLatest2<MediaItem, Duration, MediaState>(
-      AudioService.currentMediaItemStream,
-      AudioService.positionStream,
+  Stream<MediaState> get _mediaStateStream => Rx.combineLatest2<PlayerItem, Duration, MediaState>(
+      playerService.currentMediaItemStream,
+      playerService.positionStream,
       (mediaItem, position) => MediaState(mediaItem, position));
 
-  /// A stream reporting the combined state of the current queue and the current
-  /// media item within that queue.
-  Stream<QueueState> get _queueStateStream => Rx.combineLatest2<List<MediaItem>, MediaItem, QueueState>(
-      AudioService.queueStream,
-      AudioService.currentMediaItemStream,
-      (queue, mediaItem) => QueueState(queue, mediaItem));
+  Stream<PlayerQueueState> get _queueStateStream => Rx.combineLatest2<List<PlayerItem>, PlayerItem, PlayerQueueState>(
+        playerService.queueStream,
+        playerService.currentMediaItemStream,
+        (queue, mediaItem) {
+          return PlayerQueueState(queue, mediaItem);
+        },
+      );
 
   RaisedButton audioPlayerButton() => startButton(
         'AudioPlayer',
         () {
-          AudioService.start(
-            backgroundTaskEntrypoint: audioPlayerTaskEntrypoint,
-            androidNotificationChannelName: 'Audio Service Demo',
-            // Enable this if you want the Android service to exit the foreground state on pause.
-            //androidStopForegroundOnPause: true,
-            androidNotificationColor: 0xFF2196f3,
-            androidNotificationIcon: 'mipmap/ic_launcher',
-            androidEnableQueue: true,
-          );
+          playerService.init(audioPlayerTaskEntrypoint);
         },
       );
 
   RaisedButton textToSpeechButton() => startButton(
         'TextToSpeech',
         () {
-          AudioService.start(
-            backgroundTaskEntrypoint: textToSpeechTaskEntrypoint,
-            androidNotificationChannelName: 'Audio Service Demo',
-            androidNotificationColor: 0xFF2196f3,
-            androidNotificationIcon: 'mipmap/ic_launcher',
-          );
+          playerService.init(textToSpeechTaskEntrypoint);
         },
       );
 
@@ -207,45 +183,34 @@ class MainScreen extends StatelessWidget {
           WidgetsFlutterBinding.ensureInitialized();
           Directory documents = await getApplicationDocumentsDirectory();
 
-          debugPrint('documents.path ${documents.path}');
-          final saveDirPath = Directory(documents.path + Platform.pathSeparator + 'DL');
-          bool hasExisted = await saveDirPath.exists();
-          if (!hasExisted) {
-            await saveDirPath.create();
-          }
+          final saveDirPath = documents.path + Platform.pathSeparator;
 
           final taskId = await FlutterDownloader.enqueue(
-            url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
-            savedDir: saveDirPath.path,
-            showNotification: false, // show download progress in status bar (for Android)
-            openFileFromNotification: false, // click on notification to open downloaded file (for Android)
+            url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+            savedDir: saveDirPath,
           );
 
-          debugPrint(taskId);
-
-          await Future<void>.delayed(Duration(milliseconds: 5000));
+          await Future<void>.delayed(Duration(milliseconds: 4000));
 
           final tasks = await FlutterDownloader.loadTasksWithRawQuery(query: 'SELECT * FROM task');
-          // debugPrint('${tasks.last.toString()}');
           final lastTask = tasks.last;
           final filePath = '${lastTask.savedDir}${Platform.pathSeparator}${lastTask.filename}';
-          debugPrint(filePath);
-          // debugPrint('${tasks[0].savedDir}  -  ${tasks[0].filename}');
-          // FlutterDownloader.open(taskId: taskId);
+          debugPrint('saveTask has downloaded the file into: ' + filePath);
 
-          // FlutterDownloader.registerCallback((String id, DownloadTaskStatus status, int progress) {
-          //   final SendPort send = IsolateNameServer.lookupPortByName('downloader_send_port');
-          //   send.send([id, status, progress]);
-          // });
-          AudioService.start(
-            backgroundTaskEntrypoint: audioPlayerTaskEntrypoint,
-            androidNotificationChannelName: 'Audio Service Demo',
-            // Enable this if you want the Android service to exit the foreground state on pause.
-            //androidStopForegroundOnPause: true,
-            androidNotificationColor: 0xFF2196f3,
-            androidNotificationIcon: 'mipmap/ic_launcher',
-            androidEnableQueue: true,
-          );
+          final saveDir = Directory(saveDirPath);
+          final downloadedFilePath = File('${saveDir.path}SoundHelix-Song-3.mp3');
+
+          debugPrint('constructed file path: $downloadedFilePath');
+
+          // playerService.start(
+          //   backgroundTaskEntrypoint: audioPlayerTaskEntrypoint,
+          //   androidNotificationChannelName: 'Audio Service Demo',
+          //   // Enable this if you want the Android service to exit the foreground state on pause.
+          //   //androidStopForegroundOnPause: true,
+          //   androidNotificationColor: 0xFF2196f3,
+          //   androidNotificationIcon: 'mipmap/ic_launcher',
+          //   androidEnableQueue: true,
+          // );
         },
       );
 
@@ -257,31 +222,31 @@ class MainScreen extends StatelessWidget {
   IconButton playButton() => IconButton(
         icon: Icon(Icons.play_arrow),
         iconSize: 64.0,
-        onPressed: AudioService.play,
+        onPressed: playerService.play,
       );
 
   IconButton pauseButton() => IconButton(
         icon: Icon(Icons.pause),
         iconSize: 64.0,
-        onPressed: AudioService.pause,
+        onPressed: playerService.pause,
       );
 
   IconButton stopButton() => IconButton(
         icon: Icon(Icons.stop),
         iconSize: 64.0,
-        onPressed: AudioService.stop,
+        onPressed: playerService.stop,
       );
 }
 
-class QueueState {
-  final List<MediaItem> queue;
-  final MediaItem mediaItem;
+class PlayerQueueState {
+  final List<PlayerItem> queue;
+  final PlayerItem currentlyPlayingItem;
 
-  QueueState(this.queue, this.mediaItem);
+  PlayerQueueState(this.queue, this.currentlyPlayingItem);
 }
 
 class MediaState {
-  final MediaItem mediaItem;
+  final PlayerItem mediaItem;
   final Duration position;
 
   MediaState(this.mediaItem, this.position);

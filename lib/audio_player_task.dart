@@ -1,15 +1,11 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:rxdart/rxdart.dart';
 
 // NOTE: Your entrypoint MUST be a top-level function.
 Future audioPlayerTaskEntrypoint() async {
@@ -19,9 +15,17 @@ Future audioPlayerTaskEntrypoint() async {
   // debugPrint(file.path);
   // debugPrint(file.basename);
   // debugPrint(file.uri.toString());
+
   final filePath = File(
-      "/Users/thark/Library/Developer/CoreSimulator/Devices/2833D949-3B27-47CB-9377-AAF6EC9E5F26/data/Containers/Data/Application/716965B2-D072-40BB-8EA0-32F6EA1C97BB/Documents/DL/SoundHelix-Song-7.mp3");
+      "/Users/thark/Library/Developer/CoreSimulator/Devices/2833D949-3B27-47CB-9377-AAF6EC9E5F26/data/Containers/Data/Application/6DD0B8CE-0AFD-4BB6-946F-0E594A5ED62E/Documents/SoundHelix-Song-3.mp3");
   debugPrint(filePath.uri.toFilePath());
+
+  // Directory documents = await getApplicationDocumentsDirectory();
+  // final saveDirPath = Directory(documents.path + Platform.pathSeparator);
+  // final filePath = File('${saveDirPath.path}SoundHelix-Song-4.mp3');
+
+  debugPrint('');
+  debugPrint('starting AudioPlayerTask with: ${filePath.uri.toString()}');
   AudioServiceBackground.run(() => AudioPlayerTask(filePath.uri.toString()));
 }
 
@@ -106,7 +110,6 @@ class AudioPlayerTask extends BackgroundAudioTask {
     });
     // Propagate all events from the audio player to AudioService clients.
     _eventSubscription = _player.playbackEventStream.listen((event) {
-      debugPrint('_player.playbackEventStream ${event.toString()} ');
       _broadcastState();
     });
     // Special processing for state transitions.
@@ -135,7 +138,11 @@ class AudioPlayerTask extends BackgroundAudioTask {
       await _player.setAudioSource(ConcatenatingAudioSource(
         children: queue.map((item) {
           debugPrint('parsed uri ${Uri.parse(item.id)}');
-          return AudioSource.uri(Uri.parse(item.id));
+          // AudioSource.uri(uri);
+          // ProgressiveAudioSource();
+          // StreamAudioSource();
+          return LockCachingAudioSource(Uri.parse(item.id));
+          // return AudioSource.uri(Uri.parse(item.id));
         }).toList(),
       ));
 
