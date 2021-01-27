@@ -28,6 +28,7 @@ dependencies:
   dio: ^3.0.10
   flutter_cache_manager: ^2.1.1
   flutter_downloader: ^1.5.2
+  flutter_hooks: ^0.15.0
   flutter_tts: ^2.1.0
   just_audio: ^0.6.8
   path_provider: ^1.6.27
